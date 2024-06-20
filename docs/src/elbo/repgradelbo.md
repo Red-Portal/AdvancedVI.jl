@@ -21,7 +21,7 @@ where $$\epsilon_m \sim \varphi$$ are Monte Carlo samples, with respect to $$\la
 This estimator is called the reparameterization gradient estimator.
 
 In addition to the reparameterization gradient, `AdvancedVI` provides the following features:
-1. **Posteriors with constrained supports** are handled through [`Bijectors`](), which is known as the automatic differentiation VI (ADVI; [^KTRGB2017]) formulation. (See [this section](@ref bijectors).)
+1. **Posteriors with constrained supports** are handled through [`Bijectors`](https://github.com/TuringLang/Bijectors.jl), which is known as the automatic differentiation VI (ADVI; [^KTRGB2017]) formulation. (See [this section](@ref bijectors).)
 2. **The gradient of the entropy** can be estimated through various strategies depending on the capabilities of the variational family. (See [this section](@ref entropygrad).)
 
 [^TL2014]: Titsias, M., & Lázaro-Gredilla, M. (2014). Doubly stochastic variational Bayes for non-conjugate inference. In *International Conference on Machine Learning*. 
