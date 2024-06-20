@@ -1,8 +1,4 @@
 
-const PROGRESS = length(ARGS) > 0 && ARGS[1] == "--progress" ? true : false
-
-using Test
-
 @testset "inference RepGradELBO VILocationScale" begin
     @testset "$(modelname) $(objname) $(realtype) $(adbackname)"  for
         realtype in [Float64, Float32],
@@ -15,7 +11,7 @@ using Test
             :RepGradELBOClosedFormEntropy  => RepGradELBO(n_montecarlo),
             :RepGradELBOStickingTheLanding => RepGradELBO(n_montecarlo, entropy = StickingTheLandingEntropy()),
         ),
-        (adbackname, adbackend) in Dict(
+        (adbackname, adtype) in Dict(
             :ForwarDiff  => AutoForwardDiff(),
             :ReverseDiff => AutoReverseDiff(),
             :Zygote      => AutoZygote(), 
@@ -26,9 +22,16 @@ using Test
         rng  = StableRNG(seed)
 
         modelstats = modelconstr(rng, realtype)
-        @unpack model, μ_true, L_true, n_dims, is_meanfield = modelstats
+        @unpack model, μ_true, L_true, n_dims, strong_convexity, is_meanfield = modelstats
 
-        T, η = is_meanfield ? (5_000, 1e-2) : (30_000, 1e-3)
+        T   = 1000
+        η   = 1e-3
+        opt = Optimisers.Descent(realtype(η))
+
+        # For small enough η, the error of SGD, Δλ, is bounded as
+        #     Δλ ≤ ρ^T Δλ0 + O(η),
+        # where ρ = 1 - ημ, μ is the strong convexity constant.
+        contraction_rate = 1 - η*strong_convexity
 
         q0 = if is_meanfield
             MeanFieldGaussian(zeros(realtype, n_dims), Diagonal(ones(realtype, n_dims)))
@@ -41,16 +44,16 @@ using Test
             Δλ0 = sum(abs2, q0.location - μ_true) + sum(abs2, q0.scale - L_true)
             q, stats, _ = optimize(
                 rng, model, objective, q0, T;
-                optimizer     = Optimisers.Adam(realtype(η)),
+                optimizer     = opt,
                 show_progress = PROGRESS,
-                adbackend     = adbackend,
+                adtype        = adtype,
             )
 
             μ  = q.location
             L  = q.scale
             Δλ = sum(abs2, μ - μ_true) + sum(abs2, L - L_true)
 
-            @test Δλ ≤ Δλ0/T^(1/4)
+            @test Δλ ≤ contraction_rate^(T/2)*Δλ0
             @test eltype(μ) == eltype(μ_true)
             @test eltype(L) == eltype(L_true)
         end
@@ -59,9 +62,9 @@ using Test
             rng = StableRNG(seed)
             q, stats, _ = optimize(
                 rng, model, objective, q0, T;
-                optimizer     = Optimisers.Adam(realtype(η)),
+                optimizer     = opt,
                 show_progress = PROGRESS,
-                adbackend     = adbackend,
+                adtype        = adtype,
             )
             μ  = q.location
             L  = q.scale
@@ -69,9 +72,9 @@ using Test
             rng_repl = StableRNG(seed)
             q, stats, _ = optimize(
                 rng_repl, model, objective, q0, T;
-                optimizer     = Optimisers.Adam(realtype(η)),
+                optimizer     = opt,
                 show_progress = PROGRESS,
-                adbackend     = adbackend,
+                adtype        = adtype,
             )
             μ_repl = q.location
             L_repl = q.scale

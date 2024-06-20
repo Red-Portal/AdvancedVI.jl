@@ -1,3 +1,11 @@
+<<<<<<< HEAD
+=======
+[![Stable](https://img.shields.io/badge/docs-stable-blue.svg)](https://turinglang.org/AdvancedVI.jl/stable/)
+[![Dev](https://img.shields.io/badge/docs-dev-blue.svg)](https://turinglang.org/AdvancedVI.jl/dev/)
+[![Build Status](https://github.com/TuringLang/AdvancedVI.jl/actions/workflows/CI.yml/badge.svg?branch=master)](https://github.com/TuringLang/AdvancedVI.jl/actions/workflows/CI.yml?query=branch%3Amaster)
+[![JuliaNightly](https://github.com/TuringLang/AdvancedVI.jl/workflows/JuliaNightly/badge.svg?branch=master)](https://github.com/TuringLang/AdvancedVI.jl/actions?query=workflow%3AJuliaNightly+branch%3Amaster)
+[![Coverage](https://codecov.io/gh/TuringLang/AdvancedVI.jl/branch/master/graph/badge.svg)](https://codecov.io/gh/TuringLang/AdvancedVI.jl)
+>>>>>>> ef3c312f004ecf5eb14aa82878aac88037b88bc9
 
 # AdvancedVI.jl
 [AdvancedVI](https://github.com/TuringLang/AdvancedVI.jl) provides implementations of variational inference (VI) algorithms, which is a family of algorithms aiming for scalable approximate Bayesian inference by leveraging optimization.
@@ -43,7 +51,11 @@ function LogDensityProblems.capabilities(::Type{<:NormalLogNormal})
 end
 ```
 
+<<<<<<< HEAD
 Since the support of `x` is constrained to be positive, and VI is best done in the unconstrained Euclidean space, we need to use a *bijector* to transform `x` into unconstrained Euclidean space. We will use the [`Bijectors.jl`](https://github.com/TuringLang/Bijectors.jl) package for this purpose. 
+=======
+Since the support of `x` is constrained to be positive and VI is best done in the unconstrained Euclidean space, we need to use a *bijector* to transform `x` into unconstrained Euclidean space. We will use the [`Bijectors.jl`](https://github.com/TuringLang/Bijectors.jl) package for this purpose. 
+>>>>>>> ef3c312f004ecf5eb14aa82878aac88037b88bc9
 This corresponds to the automatic differentiation variational inference (ADVI) formulation[^KTRGB2017].
 ```julia
 using Bijectors
@@ -99,7 +111,11 @@ q, stats, _ = AdvancedVI.optimize(
     elbo,
     q_transformed,
     max_iter;
+<<<<<<< HEAD
     adbackend = ADTypes.AutoForwardDiff(),
+=======
+    adtype    = ADTypes.AutoForwardDiff(),
+>>>>>>> ef3c312f004ecf5eb14aa82878aac88037b88bc9
     optimizer = Optimisers.Adam(1e-3)
 )
 
@@ -109,7 +125,10 @@ estimate_objective(elbo, q, model; n_samples=10^4)
 
 For more examples and details, please refer to the documentation.
 
+<<<<<<< HEAD
 ## References
+=======
+>>>>>>> ef3c312f004ecf5eb14aa82878aac88037b88bc9
 [^TL2014]: Titsias, M., & Lázaro-Gredilla, M. (2014, June). Doubly stochastic variational Bayes for non-conjugate inference. In *International Conference on Machine Learning*. PMLR.
 [^RMW2014]: Rezende, D. J., Mohamed, S., & Wierstra, D. (2014, June). Stochastic backpropagation and approximate inference in deep generative models. In *International Conference on Machine Learning*. PMLR.
 [^KW2014]: Kingma, D. P., & Welling, M. (2014). Auto-encoding variational bayes. In *International Conference on Learning Representations*.

@@ -35,12 +35,6 @@
             @test eltype(logpdf(q, z))  == realtype 
         end
 
-        @testset "_logpdf" begin
-            z = rand(q)
-            @test Distributions._logpdf(q, z)          ≈ logpdf(q_true, z)  rtol=realtype(1e-2)
-            @test eltype(Distributions.logpdf(q, z))  == realtype 
-        end
-
         @testset "entropy" begin
             @test eltype(entropy(q)) == realtype
             @test entropy(q)         ≈ entropy(q_true)
@@ -136,5 +130,37 @@
 
         @test length(λ) == 2*n_dims
         @test q         == re(λ)
+    end
+end
+
+@testset "scale positive definite projection" begin
+    @testset "$(string(covtype)) $(realtype) $(bijector)" for
+        covtype     = [:meanfield, :fullrank],
+        realtype    = [Float32,     Float64],
+        bijector    = [nothing,    :identity]
+
+        d = 5
+        μ = zeros(realtype, d)
+        ϵ = sqrt(realtype(0.5))
+        q = if covtype == :fullrank
+            L = LowerTriangular(Matrix{realtype}(I,d,d))
+            FullRankGaussian(μ, L; scale_eps=ϵ)
+        elseif covtype == :meanfield
+            L = Diagonal(ones(realtype, d))
+            MeanFieldGaussian(μ, L; scale_eps=ϵ)
+        end
+        q_trans = if isnothing(bijector) 
+            q
+        else
+            Bijectors.TransformedDistribution(q, identity)
+        end
+        g = deepcopy(q)
+
+        λ, re   = Optimisers.destructure(q)
+        grad, _ = Optimisers.destructure(g)
+        opt_st  = Optimisers.setup(Descent(one(realtype)), λ)
+        _, λ′    = AdvancedVI.update_variational_params!(typeof(q), opt_st, λ, re, grad)
+        q′       = re(λ′)
+        @test all(diag(var(q′)) .≥ ϵ^2)
     end
 end

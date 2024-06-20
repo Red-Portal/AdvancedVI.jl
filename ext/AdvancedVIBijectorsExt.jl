@@ -4,11 +4,35 @@ module AdvancedVIBijectorsExt
 if isdefined(Base, :get_extension)
     using AdvancedVI
     using Bijectors
+    using LinearAlgebra
+    using Optimisers
     using Random
 else
     using ..AdvancedVI
     using ..Bijectors
+    using ..LinearAlgebra
+    using ..Optimisers
     using ..Random
+end
+
+function AdvancedVI.update_variational_params!(
+    ::Type{<:Bijectors.TransformedDistribution{<:AdvancedVI.MvLocationScale}},
+    opt_st,
+    params,
+    restructure,
+    grad
+)
+    opt_st, params = Optimisers.update!(opt_st, params, grad)
+    q = restructure(params)
+    ϵ = q.dist.scale_eps
+
+    # Project the scale matrix to the set of positive definite triangular matrices
+    diag_idx = diagind(q.dist.scale)
+    @. q.dist.scale[diag_idx] = max(q.dist.scale[diag_idx], ϵ)
+
+    params, _ = Optimisers.destructure(q)
+
+    opt_st, params
 end
 
 function AdvancedVI.reparam_with_entropy(
@@ -18,9 +42,9 @@ function AdvancedVI.reparam_with_entropy(
     n_samples::Int,
     ent_est  ::AdvancedVI.AbstractEntropyEstimator
 )
-    transform       = q.transform
-    q_unconst       = q.dist
-    q_unconst_stop  = q_stop.dist
+    transform      = q.transform
+    q_unconst      = q.dist
+    q_unconst_stop = q_stop.dist
 
     # Draw samples and compute entropy of the uncontrained distribution
     unconstr_samples, unconst_entropy = AdvancedVI.reparam_with_entropy(

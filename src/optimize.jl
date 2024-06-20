@@ -1,22 +1,20 @@
 
 """
-    optimize(problem, objective, restructure, param_init, max_iter, objargs...; kwargs...)              
-    optimize(problem, objective, variational_dist_init, max_iter, objargs...; kwargs...)              
+    optimize(problem, objective, q_init, max_iter, objargs...; kwargs...)              
 
 Optimize the variational objective `objective` targeting the problem `problem` by estimating (stochastic) gradients.
 
-The variational approximation can be constructed by passing the variational parameters `param_init` or the initial variational approximation `variational_dist_init` to the function `restructure`.
+The trainable parameters in the variational approximation are expected to be extractable through `Optimisers.destructure`.
+This requires the variational approximation to be marked as a functor through `Functors.@functor`.
 
 # Arguments
 - `objective::AbstractVariationalObjective`: Variational Objective.
-- `param_init`: Initial value of the variational parameters.
-- `restruct`: Function that reconstructs the variational approximation from the flattened parameters.
-- `variational_dist_init`: Initial variational distribution. The variational parameters must be extractable through `Optimisers.destructure`.
+- `q_init`: Initial variational distribution. The variational parameters must be extractable through `Optimisers.destructure`.
 - `max_iter::Int`: Maximum number of iterations.
 - `objargs...`: Arguments to be passed to `objective`.
 
 # Keyword Arguments
-- `adbackend::ADtypes.AbstractADType`: Automatic differentiation backend. 
+- `adtype::ADtypes.AbstractADType`: Automatic differentiation backend. 
 - `optimizer::Optimisers.AbstractRule`: Optimizer used for inference. (Default: `Adam`.)
 - `rng::AbstractRNG`: Random number generator. (Default: `Random.default_rng()`.)
 - `show_progress::Bool`: Whether to show the progress bar. (Default: `true`.)
@@ -32,12 +30,12 @@ The variational approximation can be constructed by passing the variational para
 # Callback
 The callback function `callback` has a signature of
 
-    callback(; stat, state, param, restructure, gradient)
+    callback(; stat, state, params, restructure, gradient)
 
 The arguments are as follows:
 - `stat`: Statistics gathered during the current iteration. The content will vary depending on `objective`.
 - `state`: Collection of the internal states used for optimization.
-- `param`: Variational parameters.
+- `params`: Variational parameters.
 - `restructure`: Function that restructures the variational approximation from the variational parameters. Calling `restructure(param)` reconstructs the variational approximation. 
 - `gradient`: The estimated (possibly stochastic) gradient.
 
@@ -50,11 +48,10 @@ function optimize(
     rng          ::Random.AbstractRNG,
     problem,
     objective    ::AbstractVariationalObjective,
-    restructure,
-    params_init,
+    q_init,
     max_iter     ::Int,
     objargs...;
-    adbackend    ::ADTypes.AbstractADType, 
+    adtype       ::ADTypes.AbstractADType, 
     optimizer    ::Optimisers.AbstractRule = Optimisers.Adam(),
     show_progress::Bool                    = true,
     state_init   ::NamedTuple              = NamedTuple(),
@@ -65,29 +62,31 @@ function optimize(
         barlen    = 31,
         showspeed = true,
         enabled   = show_progress
-    )
+    ),
 )
-    λ        = copy(params_init)
-    opt_st   = maybe_init_optimizer(state_init, optimizer, λ)
-    obj_st   = maybe_init_objective(state_init, rng, objective, λ, restructure)
-    grad_buf = DiffResults.DiffResult(zero(eltype(λ)), similar(λ))
+    params, restructure = Optimisers.destructure(deepcopy(q_init))
+    opt_st   = maybe_init_optimizer(state_init, optimizer, params)
+    obj_st   = maybe_init_objective(state_init, rng, objective, problem, params, restructure)
+    grad_buf = DiffResults.DiffResult(zero(eltype(params)), similar(params))
     stats    = NamedTuple[]
 
     for t = 1:max_iter
         stat = (iteration=t,)
 
         grad_buf, obj_st, stat′ = estimate_gradient!(
-            rng, objective, adbackend, grad_buf, problem,
-            λ, restructure,  obj_st, objargs...
+            rng, objective, adtype, grad_buf, problem,
+            params, restructure, obj_st, objargs...
         )
         stat = merge(stat, stat′)
 
-        g         = DiffResults.gradient(grad_buf)
-        opt_st, λ = Optimisers.update!(opt_st, λ, g)
+        grad = DiffResults.gradient(grad_buf)
+        opt_st, params = update_variational_params!(
+            typeof(q_init), opt_st, params, restructure, grad
+        )
 
         if !isnothing(callback)
             stat′ = callback(
-                ; stat, restructure, params=λ, gradient=g,
+                ; stat, restructure, params=params, gradient=grad,
                 state=(optimizer=opt_st, objective=obj_st)
             )
             stat = !isnothing(stat′) ? merge(stat′, stat) : stat
@@ -98,18 +97,16 @@ function optimize(
         pm_next!(prog, stat)
         push!(stats, stat)
     end
-    state  = (optimizer=opt_st, objective=obj_st)
-    stats  = map(identity, stats)
-    params = λ
-    params, stats, state
+    state = (optimizer=opt_st, objective=obj_st)
+    stats = map(identity, stats)
+    restructure(params), stats, state
 end
 
 function optimize(
     problem,
-    objective    ::AbstractVariationalObjective,
-    restructure,
-    params_init,
-    max_iter     ::Int,
+    objective::AbstractVariationalObjective,
+    q_init,
+    max_iter ::Int,
     objargs...;
     kwargs...
 )
@@ -117,42 +114,7 @@ function optimize(
         Random.default_rng(),
         problem,
         objective,
-        restructure,
-        params_init,
-        max_iter,
-        objargs...;
-        kwargs...
-    )
-end
-
-function optimize(rng                   ::Random.AbstractRNG,
-                  problem,
-                  objective             ::AbstractVariationalObjective,
-                  variational_dist_init,
-                  n_max_iter            ::Int,
-                  objargs...;
-                  kwargs...)
-    λ, restructure = Optimisers.destructure(variational_dist_init)
-    λ, logstats, state = optimize(
-        rng, problem, objective, restructure, λ, n_max_iter, objargs...; kwargs...
-    )
-    restructure(λ), logstats, state
-end
-
-
-function optimize(
-    problem,
-    objective              ::AbstractVariationalObjective,
-    variational_dist_init,
-    max_iter               ::Int,
-    objargs...;
-    kwargs...
-)
-    optimize(
-        Random.default_rng(),
-        problem,
-        objective,
-        variational_dist_init,
+        q_init,
         max_iter,
         objargs...;
         kwargs...
